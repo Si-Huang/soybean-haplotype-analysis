@@ -1,0 +1,6 @@
+interface:
+  display_name: "大豆单倍型分析"
+  short_description: "面向新手完成大豆靶基因启动子或转录因子 CDS／蛋白单倍型分析与统一科研绘图"
+  default_prompt: "使用 $soybean-haplotype-analysis 分析我提供的大豆基因，先确认研究角色和参考版本，再执行对应单倍型流程并用中文解释结果。"
+policy:
+  allow_implicit_invocation: true
