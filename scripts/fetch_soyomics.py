@@ -55,6 +55,15 @@ def finite_filter(value, lower, upper):
         return False
 
 
+def select_variants(variants, role, mapping, maf, max_missing):
+    # Some official records omit miss. Submit these to HapSnap's site_miss filter;
+    # unknown missingness must not silently become zero or "no variation".
+    selected = [v for v in variants if finite_filter(v.get('maf'), maf, 0.5)
+                and (v.get('miss') is None or finite_filter(v['miss'], 0, max_missing))
+                and (role == 'target' or int(v['position']) in mapping)]
+    return sorted(selected, key=lambda v: int(v['position']))
+
+
 def sequence_from_json(payload):
     text = payload['data']
     text = ''.join(text) if isinstance(text, list) else text
@@ -119,15 +128,18 @@ def fetch(args):
                             'rna_type': 'mRNA', 'gene_kw': transcript, 'seq_type': 'cds'})
         sequence = sequence_from_json(payload)
         manifest['cds_phase_valid'] = phase_ok and len(sequence) == len(positions)
+        manifest['cds_phase_method'] = ('Initial phase required; internal phases checked where present, '
+                                        'otherwise derived from cumulative CDS lengths. '
+                                        'Protein reconstruction additionally checks complete reference translation.')
         (out / 'reference_cds.fasta').write_text(f'>{transcript}\n{sequence}\n', encoding='utf-8')
     manifest.update({'chromosome': chromosome, 'region_start': lo, 'region_end': hi})
     variants = api.json('variants_all.json', f'{BASE}/genome_variation_list2?chr={chromosome}&start_position={lo}&end_position={hi}')
     if not isinstance(variants, list):
         raise ValueError('Variant endpoint schema changed; inspect archived response')
-    selected = [v for v in variants if finite_filter(v.get('maf'), args.maf, 0.5)
-                and finite_filter(v.get('miss'), 0, args.max_missing)
-                and (args.role == 'target' or int(v['position']) in mapping)]
-    selected.sort(key=lambda v: int(v['position']))
+    selected = select_variants(variants, args.role, mapping, args.maf, args.max_missing)
+    manifest['requested_sites_missingness_unknown'] = sum(v.get('miss') is None for v in selected)
+    manifest['missingness_filter'] = ('Known site rates filtered locally; unknown rates left unknown '
+                                     'and submitted to HapSnap site_miss filtering.')
     if len({v['position'] for v in selected}) != len(selected):
         raise ValueError('Multiple records per genomic position; normalize locally before haplotyping')
     site_rows = []
@@ -136,7 +148,7 @@ def fetch(args):
         site_rows.append({'site_id': str(p), 'position': p, 'var_id': v.get('var_id', ''),
                           'relative_position': p - start if strand == '+' else end - p,
                           'cds_position': mapping.get(p, ''), 'alleles': v.get('alleles', ''),
-                          'maf': v['maf'], 'missing': v['miss'], 'consequence': v.get('consequence', '')})
+                          'maf': v['maf'], 'missing': v.get('miss', ''), 'consequence': v.get('consequence', '')})
     columns = ['site_id', 'position', 'var_id', 'relative_position', 'cds_position', 'alleles', 'maf', 'missing', 'consequence']
     pd.DataFrame(site_rows, columns=columns).to_csv(out / 'sites_requested.csv', index=False)
     manifest['requested_site_count'] = len(site_rows)

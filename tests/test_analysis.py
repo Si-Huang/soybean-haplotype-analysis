@@ -11,9 +11,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from common import cds_features, promoter_window, reconstruct_proteins
 from analyze import analyze, association, materials, phenotype_summary, validate
 from make_demo import make_demo
+from fetch_soyomics import select_variants
 
 
 class ScientificChecks(unittest.TestCase):
+    def test_unknown_missingness_deferred_to_service_not_dropped(self):
+        variants = [{'position': 1, 'maf': .2}, {'position': 2, 'maf': .2, 'miss': .5},
+                    {'position': 3, 'maf': .2, 'miss': .01}, {'position': 4, 'maf': .001}]
+        result = select_variants(variants, 'tf', {1: 1, 2: 2, 3: 3, 4: 4}, .05, .1)
+        self.assertEqual([v['position'] for v in result], [1, 3])
+        self.assertNotIn('miss', result[0])
+
     def test_strand_and_joint_codon(self):
         self.assertEqual(promoter_window(100, 200, '+', 2000), (1, 99))
         self.assertEqual(promoter_window(100, 200, '-', 2000), (201, 2200))
@@ -40,6 +48,19 @@ class ScientificChecks(unittest.TestCase):
             chromosome, strand, positions, valid = cds_features(path, 't')
             self.assertTrue(valid)
             self.assertEqual(positions, [1, 2, 3, 4, 10, 11, 12, 13, 14])
+
+    def test_missing_internal_phase_and_unknown_initial_frame(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'ref.gff'
+            path.write_text('c\t.\tCDS\t1\t5\t.\t-\t.\tParent=t\nc\t.\tCDS\t10\t13\t.\t-\t0\tParent=t\n')
+            _, _, positions, valid = cds_features(path, 't')
+            self.assertTrue(valid)
+            self.assertEqual(positions, [13, 12, 11, 10, 5, 4, 3, 2, 1])
+            path.write_text('c\t.\tCDS\t1\t9\t.\t+\t.\tParent=t\n')
+            with self.assertRaisesRegex(ValueError, 'initial CDS phase'):
+                cds_features(path, 't')
+            path.write_text('c\t.\tCDS\t1\t4\t.\t+\t0\tParent=t\nc\t.\tCDS\t10\t14\t.\t+\t1\tParent=t\n')
+            self.assertFalse(cds_features(path, 't')[3])
 
     def test_materials_and_fieldwise_phenotype_missingness(self):
         assignments = pd.DataFrame([['a', 'H1', 'Soja'], ['a', 'H1', 'Soja'],

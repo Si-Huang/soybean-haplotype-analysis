@@ -19,7 +19,7 @@ description: Analyze soybean gene haplotypes with beginner-friendly explanations
 ## 执行
 
 1. 阅读 [输入与来源](references/inputs-and-sources.md)。定位本 skill 绝对路径；检查 Python 和依赖，缺失时在独立虚拟环境安装 `requirements.txt`。输出放用户项目的新目录。
-2. SoyOmics 数据执行 `scripts/fetch_soyomics.py --gene ID --role target|tf --out INPUT_DIR`。可加 `--symbol NAME`、`--transcript ID.m1`、`--gff FILE`。TF 默认 `.m1` 并向用户说明，用户指定优先。保存原始响应、参数、时间、哈希、保留位点清单。首次 TF 运行下载官方 GFF，可复用匹配版本本地 GFF。
+2. SoyOmics 数据执行 `scripts/fetch_soyomics.py --gene ID --role target|tf --out INPUT_DIR`。可加 `--symbol NAME`、`--transcript ID.m1`、`--gff FILE`。TF 默认先检查 `.m1`，用户指定优先；默认转录本读框冲突时保留审计，按输入指南检查其他完整转录本并说明选择。保存原始响应、参数、时间、哈希、保留位点清单。首次 TF 运行下载官方 GFF，可复用匹配版本本地 GFF。
 3. 执行 `scripts/analyze.py --input INPUT_DIR --out RESULT_DIR`。按需传 `--phenotypes CSV`、`--domains CSV`。原始 phased VCF 或已有表格按输入规范转换，不能伪造分相。只有一个类型也如实交付；没有位点且缺少材料分母时报告“当前筛选未保留变异”，不能虚构全体材料类型。
 4. 阅读 [统计与扩展](references/analysis.md)。基础包含矩阵、网络、群体频率、映射、报告；可靠坐标才做地图，材料级表型才做表型，候选 TF/PWM 明确才做 motif，环境作为探索模块。缺数据写明缺什么，继续其他独立模块。
 5. 遵循 [绘图约定](references/figure-style.md)。核心脚本生成 PDF/SVG/PNG；扩展图复用 `scripts/style.py`。按 [新手讲解](references/beginner-guide.md) 解释结果。

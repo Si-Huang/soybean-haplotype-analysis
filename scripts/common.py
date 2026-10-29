@@ -47,19 +47,22 @@ def cds_features(path, transcript):
             attrs = dict(item.split('=', 1) for item in c[8].split(';') if '=' in item)
             if transcript not in [unquote(x) for x in attrs.get('Parent', '').split(',')]:
                 continue
-            if c[7] not in ['0', '1', '2']:
-                raise ValueError('Missing CDS phase; cannot validate automatic translation')
+            if c[7] not in ['0', '1', '2', '.']:
+                raise ValueError('Invalid CDS phase')
             locus.add((c[0], c[6]))
-            segments.append((int(c[3]), int(c[4]), int(c[7])))
+            segments.append((int(c[3]), int(c[4]), None if c[7] == '.' else int(c[7])))
     if not segments or len(locus) != 1:
         raise ValueError(f'Expected one CDS locus for {transcript}')
     chromosome, strand = locus.pop()
     if strand not in ['+', '-']:
         raise ValueError('Unknown CDS strand')
     segments.sort(reverse=strand == '-')
+    if segments[0][2] is None:
+        raise ValueError('Missing initial CDS phase; cannot establish the reading frame')
     positions, phase_ok = [], True
     for start, end, phase in segments:
-        phase_ok &= phase == ((3 - len(positions) % 3) % 3)
+        # Internal missing phases follow uniquely from an established initial frame.
+        phase_ok &= phase is None or phase == ((3 - len(positions) % 3) % 3)
         positions.extend(range(start, end + 1) if strand == '+' else range(end, start - 1, -1))
     if len(positions) != len(set(positions)):
         raise ValueError('Overlapping CDS features')
